@@ -560,14 +560,19 @@ def get_body_content(get_param, conn):
     if not action:
         action = "list_courses"
 
-    if action == "list_courses":
-        return showAllCourses(conn) + showAddCoursesForm(conn)
-    elif action == "add_course":
+    if action == "add_course":
         return addCourse(
             conn,
             get_param("course_name"),
             get_param("course_number"),
             get_param("course_room")
+        )
+    elif action == "list_courses":
+        return showAllCourses(conn) + showAddCoursesForm(conn)
+    elif action == "get_course":
+        return getCourse(
+            conn,
+            get_param("course_number")
         )
     elif action == "update_course":
         return updateCourse(conn, 
@@ -575,19 +580,19 @@ def get_body_content(get_param, conn):
             get_param("course_number"),
             get_param("course_room")
         )
-    elif action == "get_course":
-        return getCourse(
-            conn,
-            get_param("course_number")
-        )
     elif action == "delete_course":
         return deleteCourse(conn, get_param("course_number"))
-    elif action == "list_rooms":
-        return showAllRooms(conn) + showAddRoomForm()
     elif action == "add_room":
         return addRoom(conn, 
             get_param("room_number"), 
             get_param("room_capacity")
+        )
+    elif action == "list_rooms":
+        return showAllRooms(conn) + showAddRoomForm()
+    elif action == "get_room":
+        return getRoom(
+            conn,
+            get_param("room_number")
         )
     elif action == "update_room":
         return updateRoom(conn, 
@@ -596,18 +601,13 @@ def get_body_content(get_param, conn):
         )
     elif action == "delete_room":
         return deleteRoom(conn, get_param("room_number"))
-    elif action == "get_room":
-        return getRoom(
-            conn,
-            get_param("room_number")
-        )
-    elif action == "list_students":
-        return showAllStudents(conn) + showAddStudentForm()
     elif action == "add_student":
         return addStudent(conn, 
             get_param("student_id"),
             get_param("student_name")
         )
+    elif action == "list_students":
+        return showAllStudents(conn) + showAddStudentForm()
     elif action == "update_student":
         return updateStudent(conn, 
             get_param("student_id"),
