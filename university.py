@@ -242,6 +242,47 @@ def showAddCoursesForm(conn):
     </FORM>
     """
 
+def getStudent(conn, student_id):
+    # First, get current data for this room
+    cursor = conn.cursor()
+
+    sql = """
+    SELECT *
+    FROM student
+    WHERE id=%s
+    """
+    cursor.execute(sql, (student_id,))
+
+    data = cursor.fetchall()
+
+    # Create a form to update this course
+    student_id, student_name = data[0]
+
+    return """
+    <a href="javascript:history.back()">Back</a>
+    <h2>View and Edit Student #%s</h2>
+    <p>
+    <FORM METHOD="POST" action="/">
+    <table>
+        <tr>
+            <td>Student Name</td>
+            <td><input name="student_name" value="%s"></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>
+            <input type="hidden" name="student_id" value="%s">
+            <input hidden name="action" value="update_student">
+            <input type="submit" value="Update!">
+            </td>
+        </tr>
+    </table>
+    </FORM>
+    """ % (
+        student_id,
+        student_name,
+        student_id
+    )
 
 
 def getRoom(conn, room_number):
@@ -390,13 +431,13 @@ def delayed_redirect(address, seconds = 5, label=None):
     """ % ( escape(address), label, seconds_explanation, address, seconds * 1000 )
 
 def updateStudent(conn, student_id, student_name):
-    err = check_room_info(student_id, student_name, "update")
+    err = check_student_info(student_id, student_name, "update")
     if err:
         return err
     
     cursor = conn.cursor()
 
-    sql = "UPDATE room SET name=%s WHERE id=%s"
+    sql = "UPDATE student SET name=%s WHERE id=%s"
     params = (student_name, student_id)
 
     cursor.execute(sql, params)
@@ -517,9 +558,23 @@ def deleteRoom(conn, room_number):
         return "Delete Room Failed: Please make sure no courses are using this room before deleting it." + delayed_redirect("/?action=list_rooms")
     
     if cursor.rowcount > 0:
-        return "Delete Room Succeeded." + delayed_redirect("/?action=list_rooms")
+        return "Delete Room Succeeded." + delayed_redirect("/?action=list_rooms", 0)
     else:
         return "Delete Room Failed." + delayed_redirect("/?action=list_rooms")
+
+
+def deleteStudent(conn, student_id):
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM student WHERE id = %s", (student_id,))
+        conn.commit()
+    except psycopg2.errors.ForeignKeyViolation:
+        return "Delete Student Failed: Please make sure this student is not enrolled in any courses before deleting them." + delayed_redirect("/?action=list_students")
+    
+    if cursor.rowcount > 0:
+        return "Delete Student Succeeded." + delayed_redirect("/?action=list_students", 0)
+    else:
+        return "Delete Student Failed." + delayed_redirect("/?action=list_students")
 
 
 def deleteCourse(conn, course_number):
@@ -608,11 +663,18 @@ def get_body_content(get_param, conn):
         )
     elif action == "list_students":
         return showAllStudents(conn) + showAddStudentForm()
+    elif action == "get_student":
+        return getStudent(
+            conn,
+            get_param("student_id")
+        )
     elif action == "update_student":
         return updateStudent(conn, 
             get_param("student_id"),
             get_param("student_name")
         )
+    elif action == "delete_student":
+        return deleteStudent(conn, get_param("student_id"))
     # If an action was specified which is invalid
     else:
         return "Error 404: page not found or could not be rendered."
