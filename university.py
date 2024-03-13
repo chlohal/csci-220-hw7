@@ -7,6 +7,7 @@ from html import escape
 import psycopg2
 
 VALID_COURSE_NUMBER_REGEX = re.compile(r"^\w{2,} \d{2,}$")
+VALID_ROOM_NUMBER_REGEX = VALID_COURSE_NUMBER_REGEX
 
 def wrapBody(body, title="Blank Title"):
     return (
@@ -22,6 +23,43 @@ def wrapBody(body, title="Blank Title"):
         "</html>\n"
     )
 
+def showAllRooms(conn):
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT number, capacity FROM room")
+
+    ## create an HTML table for output:
+    body = """
+    <a href="/">Back to Course List</a>
+    <h2>Room List</h2>
+    <p>
+    <table border=1>
+      <tr>
+        <td><font size=+1"><b>Room</b></font></td>
+        <td><font size=+1"><b>Capacity</b></font></td>
+        <td><font size=+1"><b>delete</b></font></td>
+      </tr>
+    """
+
+    count = 0
+    # each iteration of this loop creates on row of output:
+    for room_number, room_capacity in cursor:
+        body += (
+            "<tr>"
+            f"<td><a href='?action=get_room&room_number={room_number}'>{escape(room_number)}</a></td>"
+            f"<td>{room_capacity}</td>"
+            "<td><form method='post' action='/'>"
+            f"<input type='hidden' NAME='room_number' VALUE='{room_number}'>"
+            f"<input type='hidden' NAME='action' VALUE='delete_room'>"
+            '<input type="submit" name="deleteRoom" value="Delete">'
+            "</form></td>"
+            "</tr>\n"
+        )
+        count += 1
+
+    body += "</table>" f"<p>Found {count} courses.</p>"
+
+    return body
 
 def showAllCourses(conn):
     cursor = conn.cursor()
@@ -42,7 +80,7 @@ def showAllCourses(conn):
     <table border=1>
       <tr>
         <td><font size=+1"><b>Course</b></font></td>
-        <td><font size=+1"><b>Room</b></font></td>
+        <td><font size=+1"><b><a href="/?action=list_rooms">Room</a></b></font></td>
         <td><font size=+1"><b>Enrolled</b></font></td>
         <td><font size=+1"><b>Capacity</b></font></td>
         <td><font size=+1"><b>delete</b></font></td>
@@ -54,12 +92,13 @@ def showAllCourses(conn):
     for course_number, course_name, room_number, email, activities in cursor:
         body += (
             "<tr>"
-            f"<td><a href='?course_number={course_number}'>{course_name}</a></td>"
-            f"<td><a href='?room_number={room_number}'>{room_number}</a></td>"
+            f"<td><a href='?action=get_course&course_number={course_number}'>{course_name}</a></td>"
+            f"<td><a href='?action=get_room&room_number={room_number}'>{room_number}</a></td>"
             f"<td>{email}</td>"
             f"<td>{activities}</td>"
-            "<td><form method='post' action='miniFacebook.py'>"
+            "<td><form method='post' action='/'>"
             f"<input type='hidden' NAME='course_number' VALUE='{course_number}'>"
+            f"<input type='hidden' NAME='action' VALUE='delete_course'>"
             '<input type="submit" name="deleteCourse" value="Delete">'
             "</form></td>"
             "</tr>\n"
@@ -70,106 +109,30 @@ def showAllCourses(conn):
 
     return body
 
-
-def showProfilePage(conn, idNum):
-    body = """
-    <a href="./miniFacebook.py">Return to main page.</a>
-    """
-
-    cursor = conn.cursor()
-
-    sql = """
-    SELECT *
-    FROM profiles
-    WHERE id=%s
-    """
-    cursor.execute(sql, (int(idNum),))
-
-    data = cursor.fetchall()
-
-    # show profile information
-    (idNum, lastname, firstName, email, activities) = data[0]
-
-    body += """
-    <h2>%s %s's Profile Page</h2>
+def showAddRoomForm():
+    return f"""
+    <h2>Add A Room</h2>
     <p>
-    <table border=1>
+    <FORM METHOD="POST">
+    <table>
         <tr>
-            <td>Email</td>
-            <td>%s</td>
+            <td>Room Name</td>
+            <td><INPUT TYPE="TEXT" NAME="room_number" VALUE="BUILDING 123"></td>
         </tr>
         <tr>
-            <td>Activities</td>
-            <td>%s</td>
+            <td>Room Capacity</td>
+            <td><INPUT TYPE="number" NAME="room_capacity" VALUE=""></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>
+            <input hidden name="action" value="add_room">
+            <input type="submit" value="Add!">
+            </td>
         </tr>
     </table>
-    """ % (
-        firstName,
-        lastname,
-        email,
-        activities,
-    )
-
-    # provide an update button:
-    body += (
-        """
-    <FORM METHOD="POST" action="miniFacebook.py">
-    <INPUT TYPE="HIDDEN" NAME="idNum" VALUE="%s">
-    <INPUT TYPE="SUBMIT" NAME="showUpdateProfileForm" VALUE="Update Profile">
     </FORM>
     """
-        % idNum
-    )
-
-    # Get and display all status message for this person
-    sql = """
-    SELECT DateTime, Message
-    FROM status
-    WHERE profile_id=%s
-    """
-
-    cursor.execute(sql, (int(idNum),))
-
-    data = cursor.fetchall()
-
-    body += """
-    <h2>Status Updates</h2>
-    <p>
-    <table border=1>
-        <tr>
-          <td>DateTime</td>
-          <td>Message</td>
-        </tr>
-    """
-
-    for row in data:
-
-        body += (
-            """
-        <tr>
-          <td>%s</td>
-          <td>%s</td>
-        </tr>
-        """
-            % row
-        )
-
-    body += """
-    </table>
-    """
-
-    # Add form to let user update their status message
-    body += (
-        """
-    <FORM METHOD="POST" action="miniFacebook.py">
-    <INPUT TYPE="HIDDEN" NAME="idNum" VALUE="%s">
-	<input type="text" name="message" value="Enter a new status...">
-    <INPUT TYPE="SUBMIT" NAME="processStatusUpdate" VALUE="Update Status">
-    </FORM>
-    """
-        % idNum
-    )
-    return body
 
 
 def showAddCoursesForm(conn):
@@ -205,12 +168,56 @@ def showAddCoursesForm(conn):
         <tr>
             <td></td>
             <td>
-            <input type="submit" name="add_course" value="Add!">
+            <input hidden name="action" value="add_course">
+            <input type="submit" value="Add!">
             </td>
         </tr>
     </table>
     </FORM>
     """
+
+
+
+def getRoom(conn, room_number):
+    # First, get current data for this room
+    cursor = conn.cursor()
+
+    sql = """
+    SELECT *
+    FROM room
+    WHERE number=%s
+    """
+    cursor.execute(sql, (room_number,))
+
+    data = cursor.fetchall()
+
+    # Create a form to update this course
+    room_number, room_capacity = data[0]
+
+    return """
+    <h2>View and Edit Room %s</h2>
+    <p>
+    <FORM METHOD="POST" action="/">
+    <table>
+        <tr>
+            <td>Room Capacity</td>
+            <td><input name="room_capacity" type="number" value="%s"></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>
+            <input type="hidden" name="room_number" value="%s">
+            <input hidden name="action" value="update_room">
+            <input type="submit" value="Update!">
+            </td>
+        </tr>
+    </table>
+    </FORM>
+    """ % (
+        room_number,
+        room_capacity,
+        room_number
+    )
 
 
 def getCourse(conn, course_number):
@@ -251,8 +258,9 @@ def getCourse(conn, course_number):
         <tr>
             <td></td>
             <td>
-            <input type="hidden" name="idNum" value="%s">
-            <input type="submit" name="update_course" value="Update!">
+            <input type="hidden" name="course_number" value="%s">
+            <input hidden name="action" value="update_course">
+            <input type="submit" value="Update!">
             </td>
         </tr>
     </table>
@@ -264,11 +272,63 @@ def getCourse(conn, course_number):
         course_number
     )
 
+def check_room_info(room_number, room_capacity, action_verb):
+    try:
+        room_capacity = int(room_capacity)
+        if room_capacity <= 0:
+            return f"Couldn't {action_verb} room: capacity must be more than 0"
+    except ValueError:
+        return f"Couldn't {action_verb} room: make sure room capacity is a positive number"
+    if not VALID_ROOM_NUMBER_REGEX.match(room_number):
+        return f"Couldn't {action_verb} room: make sure number follows format ABCD 1234 (BUILDING, then number)"
+
+
 def check_course_info(course_name, course_number, course_room, action_verb):
     if course_name == "":
         return f"Couldn't {action_verb} course: make sure name is non-blank"
     if not VALID_COURSE_NUMBER_REGEX.match(course_number):
         return f"Couldn't {action_verb} course: make sure number follows format ABCD 1234 (DEPT, then number)"
+
+
+def delayed_redirect(address, seconds = 5, label=None):
+
+    if type(label) == str:
+        label = "to " + label
+    elif label == None:
+        label = "back"
+    else:
+        label = str(label)
+
+    seconds_explanation = f"in {seconds} seconds" if seconds > 0 else "shortly"
+
+    return """
+    <p>Redirecting <a href="%s">%s</a>...<span class="redir-seconds">If you are not redirected %s, please click the link.</span></p>
+    <script>
+        setTimeout(function() {
+            window.location.replace("%s");
+        }, %s)
+    </script>
+    """ % ( escape(address), label, seconds_explanation, address, seconds * 1000 )
+
+
+def updateRoom(conn, room_number, room_capacity):
+    err = check_room_info(room_number, room_capacity, "update")
+    if err:
+        return err
+    
+    cursor = conn.cursor()
+
+    sql = "UPDATE room SET capacity=%s WHERE number=%s"
+    params = (room_capacity, room_number)
+
+    cursor.execute(sql, params)
+    conn.commit()
+
+    if cursor.rowcount > 0:
+        return "Update Room Succeeded. " + delayed_redirect(f"/?action=list_rooms",0)
+    else:
+        return "Update Room Failed. Please try again." + delayed_redirect(f"/?action=list_rooms")
+
 
 def updateCourse(conn, course_name, course_number, course_room):
     err = check_course_info(course_name, course_number, course_room, "update")
@@ -284,14 +344,36 @@ def updateCourse(conn, course_name, course_number, course_room):
     conn.commit()
 
     if cursor.rowcount > 0:
-        return "Update Course Succeeded."
+        return "Update Course Succeeded. " + delayed_redirect(f"/", 0)
     else:
-        return "Update Course Failed."
+        return "Update Course Failed. Please try again." + delayed_redirect(f"/")
+
+def addRoom(conn, room_number, room_capacity):
+    cursor = conn.cursor()
+
+    err = check_room_info(room_number, room_capacity, "create")
+    if err:
+        return err+ delayed_redirect("/?action=list_rooms")
+
+    sql = "INSERT INTO room VALUES (%s,%s)"
+    params = (room_number, room_capacity)
+
+    try: 
+        cursor.execute(sql, params)
+        conn.commit()
+    except psycopg2.errors.UniqueViolation:
+        return f"Add Room Failed: room {escape(room_number)} already exists."+ delayed_redirect("/?action=list_rooms")
+    
+    if cursor.rowcount > 0:
+        return "Add Room Succeeded." + delayed_redirect("/?action=list_rooms")
+    else:
+        return "Add Room Failed."+ delayed_redirect("/?action=list_rooms")
+
 
 def addCourse(conn, course_name, course_number, course_room):
     cursor = conn.cursor()
 
-    err = check_course_info(course_name, course_number, course_room, "update")
+    err = check_course_info(course_name, course_number, course_room, "create")
     if err:
         return err
 
@@ -302,51 +384,36 @@ def addCourse(conn, course_name, course_number, course_room):
     conn.commit()
 
     if cursor.rowcount > 0:
-        return "Add Course Succeeded."
+        return "Add Course Succeeded." + delayed_redirect("/")
     else:
-        return "Add Course Failed."
+        return "Add Course Failed." + delayed_redirect("/")
 
-
-def updateStatusMessage(conn, idNum, message):
+def deleteRoom(conn, room_number):
     cursor = conn.cursor()
-
-    tm = time.localtime()
-    nowtime = "%04d-%02d-%02d %02d:%02d:%02d" % tm[0:6]
-
-    sql = "INSERT INTO status(profile_id, message, dateTime) VALUES (%s,%s,%s)"
-    params = (idNum, message, nowtime)
-    cursor.execute(sql, params)
-    conn.commit()
-
+    try:
+        cursor.execute("DELETE FROM room WHERE number = %s", (room_number,))
+        conn.commit()
+    except psycopg2.errors.ForeignKeyViolation:
+        return "Delete Room Failed: Please make sure no courses are using this room before deleting it." + delayed_redirect("/?action=list_rooms")
+    
     if cursor.rowcount > 0:
-        return "Succeeded."
+        return "Delete Room Succeeded." + delayed_redirect("/?action=list_rooms")
     else:
-        return "Failed."
-
-
-def processProfileUpdate(conn, idNum, lastname, firstname, email, activities):
-    cursor = conn.cursor()
-
-    sql = "UPDATE profiles SET lastname=%s, firstname=%s, email=%s, activities=%s WHERE id = %s"
-    params = (lastname, firstname, email, activities, idNum)
-
-    cursor.execute(sql, params)
-    conn.commit()
-
-    if cursor.rowcount > 0:
-        return "Update Profile Succeeded."
-    else:
-        return "Update Profile Failed."
+        return "Delete Room Failed." + delayed_redirect("/?action=list_rooms")
 
 
 def deleteCourse(conn, course_number):
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM course WHERE number = %s", (course_number,))
-    conn.commit()
+    try:
+        cursor.execute("DELETE FROM course WHERE number = %s", (course_number,))
+        conn.commit()
+    except psycopg2.errors.ForeignKeyViolation:
+        return "Delete Course Failed: Please make sure to unenroll all students before deleting course." + delayed_redirect("/")
+    
     if cursor.rowcount > 0:
-        return "Delete Course Succeeded."
+        return "Delete Course Succeeded." + delayed_redirect("/")
     else:
-        return "Delete Course Failed."
+        return "Delete Course Failed." + delayed_redirect("/")
 
 
 def get_qs_post(env):
@@ -367,6 +434,51 @@ def get_qs_post(env):
     post = parse_qs(request_body)
     return parse_qs(env["QUERY_STRING"]), post
 
+def get_body_content(get_param, conn):
+    action = get_param("action")
+
+    if action == "add_course":
+        return addCourse(
+            conn,
+            get_param("course_name"),
+            get_param("course_number"),
+            get_param("course_room")
+        )
+    elif action == "update_course":
+        return updateCourse(conn, 
+            get_param("course_name"),
+            get_param("course_number"),
+            get_param("course_room")
+        )
+    elif action == "delete_course":
+        return deleteCourse(conn, get_param("course_number"))
+    elif action == "list_rooms":
+        return showAllRooms(conn) + showAddRoomForm()
+    elif action == "delete_room":
+        return deleteRoom(conn, get_param("room_number"))
+    elif action == "add_room":
+        return addRoom(conn, 
+            get_param("room_number"), 
+            get_param("room_capacity")
+        )
+    elif action == "update_room":
+        return updateRoom(conn, 
+            get_param("room_number"),
+            get_param("room_capacity")
+        )
+    elif action == "get_room":
+        return getRoom(
+            conn,
+            get_param("room_number")
+        )
+    elif action == "get_course":
+        return getCourse(
+            conn,
+            get_param("course_number")
+        )
+    # default case: show all courses
+    else:
+        return showAllCourses(conn) + showAddCoursesForm(conn)
 
 def application(env, start_response):
     qs, post = get_qs_post(env)
@@ -376,9 +488,6 @@ def application(env, start_response):
     # combine them
     qs.update(post)
     params = qs
-
-    def param(p):
-        return params.get(p, [""])[0]
 
     body = ""
     try:
@@ -396,28 +505,7 @@ def application(env, start_response):
         print(f"Database error: {e}")
         body += "Check logs for DB error"
 
-    if "add_course" in params:
-        body += addCourse(
-            conn,
-            param("course_name"),
-            param("course_number"),
-            param("course_room")
-        )
-    elif "update_course" in params:
-        body += updateCourse(conn, 
-            param("course_name"),
-            param("course_number"),
-            param("course_room")
-        )
-    elif "course_number" in params:
-        body += getCourse(
-            conn,
-            param("course_number")
-        )
-    # default case: show all courses
-    else:
-        body += showAllCourses(conn)
-        body += showAddCoursesForm(conn)
+    body += get_body_content(lambda p: params.get(p, [""])[0], conn)
 
     start_response("200 OK", [("Content-Type", "text/html")])
     return [wrapBody(body, title="Mini Facebook").encode("utf-8")]
