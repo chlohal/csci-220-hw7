@@ -683,8 +683,14 @@ def application(env, start_response):
     qs, post = get_qs_post(env)
 
     # No semantic difference on the backend of
-    # this app between query params and post data --
-    # combine them
+    # this app between query params and post data.
+    # While there is a semantic difference on the FRONT
+    # end (mainly relating to maximum length of the GET url
+    # and visibility to the user), the backend doesn't care.
+    # Everything is "secure" already once it's gotten to the backend,
+    # since this site has no access control. Therefore, this backend
+    # combines the two sets of parameters early on to eliminate any
+    # source of confusion (e.g. "is paramater `x` in `qs` or `post`?")
     qs.update(post)
     params = qs
 
