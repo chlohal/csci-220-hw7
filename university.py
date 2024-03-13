@@ -23,6 +23,46 @@ def wrapBody(body, title="Blank Title"):
         "</html>\n"
     )
 
+def showAllStudents(conn):
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id, name FROM student")
+
+    ## create an HTML table for output:
+    body = """
+    <a href="/">Back to Course List</a>
+    <h2>Student List</h2>
+    <p>
+    <table border=1>
+      <tr>
+        <td><font size=+1"><b>Student ID</b></font></td>
+        <td><font size=+1"><b>Name</b></font></td>
+        <td><font size=+1"><b>delete</b></font></td>
+      </tr>
+    """
+
+    count = 0
+    # each iteration of this loop creates on row of output:
+    for student_id, student_name in cursor:
+        body += (
+            "<tr>"
+            f"<td><a href='?action=get_student&student_id={student_id}'>{student_id}</a></td>"
+            f"<td>{escape(student_name)}</td>"
+            "<td><form method='post' action='/'>"
+            f"<input type='hidden' NAME='student_id' VALUE='{student_id}'>"
+            f"<input type='hidden' NAME='action' VALUE='delete_student'>"
+            '<input type="submit" name="deleteStudent" value="Delete">'
+            "</form></td>"
+            "</tr>\n"
+        )
+        count += 1
+
+    body += "</table>" f"<p>Found {count} students.</p>"
+
+    return body
+
+
+
 def showAllRooms(conn):
     cursor = conn.cursor()
 
@@ -57,7 +97,7 @@ def showAllRooms(conn):
         )
         count += 1
 
-    body += "</table>" f"<p>Found {count} courses.</p>"
+    body += "</table>" f"<p>Found {count} rooms.</p>"
 
     return body
 
@@ -81,7 +121,7 @@ def showAllCourses(conn):
       <tr>
         <td><font size=+1"><b>Course</b></font></td>
         <td><font size=+1"><b><a href="/?action=list_rooms">Room</a></b></font></td>
-        <td><font size=+1"><b>Enrolled</b></font></td>
+        <td><font size=+1"><b><a href="/?action=list_students">Enrolled</a></b></font></td>
         <td><font size=+1"><b>Capacity</b></font></td>
         <td><font size=+1"><b>delete</b></font></td>
       </tr>
@@ -109,6 +149,32 @@ def showAllCourses(conn):
 
     return body
 
+def showAddStudentForm():
+    return f"""
+    <h2>Add A Student</h2>
+    <p>
+    <FORM METHOD="POST">
+    <table>
+        <tr>
+            <td>Student ID</td>
+            <td><INPUT TYPE="TEXT" NAME="student_id" pattern="[0-9]+"></td>
+        </tr>
+        <tr>
+            <td>Student Name</td>
+            <td><INPUT NAME="student_name" VALUE=""></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>
+            <input hidden name="action" value="add_student">
+            <input type="submit" value="Add!">
+            </td>
+        </tr>
+    </table>
+    </FORM>
+    """
+
+
 def showAddRoomForm():
     return f"""
     <h2>Add A Room</h2>
@@ -117,7 +183,7 @@ def showAddRoomForm():
     <table>
         <tr>
             <td>Room Name</td>
-            <td><INPUT TYPE="TEXT" NAME="room_number" VALUE="BUILDING 123"></td>
+            <td><INPUT TYPE="TEXT" NAME="room_number" placeholder="BUILDING 123"></td>
         </tr>
         <tr>
             <td>Room Capacity</td>
@@ -195,6 +261,7 @@ def getRoom(conn, room_number):
     room_number, room_capacity = data[0]
 
     return """
+    <a href="javascript:history.back()">Back</a>
     <h2>View and Edit Room %s</h2>
     <p>
     <FORM METHOD="POST" action="/">
@@ -240,6 +307,7 @@ def getCourse(conn, course_number):
     cursor.execute("SELECT number FROM room")
 
     return """
+    <a href="javascript:history.back()">Back</a>
     <h2>View and Edit Course %s</h2>
     <p>
     <FORM METHOD="POST">
@@ -271,6 +339,17 @@ def getCourse(conn, course_number):
         "".join( f"<option { 'selected' if room == course_room else '' }>{room}</option>" for room, in cursor ),
         course_number
     )
+
+def check_student_info(student_id, student_name, action_verb):
+    try:
+        student_id = int(student_id)
+        if student_id <= 0:
+            return f"Couldn't {action_verb} student: ID cannot be negative"
+    except ValueError:
+        return f"Couldn't {action_verb} student: make sure student ID is a number"
+    if student_name == "":
+        return f"Couldn't {action_verb} student: make sure name isn't blank"
+
 
 def check_room_info(room_number, room_capacity, action_verb):
     try:
@@ -309,6 +388,25 @@ def delayed_redirect(address, seconds = 5, label=None):
         }, %s)
     </script>
     """ % ( escape(address), label, seconds_explanation, address, seconds * 1000 )
+
+def updateStudent(conn, student_id, student_name):
+    err = check_room_info(student_id, student_name, "update")
+    if err:
+        return err
+    
+    cursor = conn.cursor()
+
+    sql = "UPDATE room SET name=%s WHERE id=%s"
+    params = (student_name, student_id)
+
+    cursor.execute(sql, params)
+    conn.commit()
+
+    if cursor.rowcount > 0:
+        return "Update Student Succeeded. " + delayed_redirect(f"/?action=list_students",0)
+    else:
+        return "Update Student Failed. Please try again." + delayed_redirect(f"/?action=list_students")
+
 
 
 def updateRoom(conn, room_number, room_capacity):
@@ -368,6 +466,28 @@ def addRoom(conn, room_number, room_capacity):
         return "Add Room Succeeded." + delayed_redirect("/?action=list_rooms")
     else:
         return "Add Room Failed."+ delayed_redirect("/?action=list_rooms")
+
+def addStudent(conn, student_id, student_name):
+    cursor = conn.cursor()
+
+    err = check_student_info(student_id, student_name, "create")
+    if err:
+        return err+ delayed_redirect("/?action=list_students")
+
+    sql = "INSERT INTO student VALUES (%s,%s)"
+    params = (student_id, student_name)
+
+    try: 
+        cursor.execute(sql, params)
+        conn.commit()
+    except psycopg2.errors.UniqueViolation:
+        return f"Add Student Failed: student with ID {student_id} already exists."+ delayed_redirect("/?action=list_students")
+    
+    if cursor.rowcount > 0:
+        return "Add Student Succeeded." + delayed_redirect("/?action=list_students", 0)
+    else:
+        return "Add Student Failed."+ delayed_redirect("/?action=list_students")
+
 
 
 def addCourse(conn, course_name, course_number, course_room):
@@ -436,8 +556,13 @@ def get_qs_post(env):
 
 def get_body_content(get_param, conn):
     action = get_param("action")
+    # Default action: list courses
+    if not action:
+        action = "list_courses"
 
-    if action == "add_course":
+    if action == "list_courses":
+        return showAllCourses(conn) + showAddCoursesForm(conn)
+    elif action == "add_course":
         return addCourse(
             conn,
             get_param("course_name"),
@@ -450,12 +575,15 @@ def get_body_content(get_param, conn):
             get_param("course_number"),
             get_param("course_room")
         )
+    elif action == "get_course":
+        return getCourse(
+            conn,
+            get_param("course_number")
+        )
     elif action == "delete_course":
         return deleteCourse(conn, get_param("course_number"))
     elif action == "list_rooms":
         return showAllRooms(conn) + showAddRoomForm()
-    elif action == "delete_room":
-        return deleteRoom(conn, get_param("room_number"))
     elif action == "add_room":
         return addRoom(conn, 
             get_param("room_number"), 
@@ -466,19 +594,28 @@ def get_body_content(get_param, conn):
             get_param("room_number"),
             get_param("room_capacity")
         )
+    elif action == "delete_room":
+        return deleteRoom(conn, get_param("room_number"))
     elif action == "get_room":
         return getRoom(
             conn,
             get_param("room_number")
         )
-    elif action == "get_course":
-        return getCourse(
-            conn,
-            get_param("course_number")
+    elif action == "list_students":
+        return showAllStudents(conn) + showAddStudentForm()
+    elif action == "add_student":
+        return addStudent(conn, 
+            get_param("student_id"),
+            get_param("student_name")
         )
-    # default case: show all courses
+    elif action == "update_student":
+        return updateStudent(conn, 
+            get_param("student_id"),
+            get_param("student_name")
+        )
+    # If an action was specified which is invalid
     else:
-        return showAllCourses(conn) + showAddCoursesForm(conn)
+        return "Error 404: page not found or could not be rendered."
 
 def application(env, start_response):
     qs, post = get_qs_post(env)
